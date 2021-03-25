@@ -3,7 +3,7 @@
 use anyhow::*;
 use glow::*;
 use image::GenericImageView;
-use imgui::DrawVert;
+use imgui::{DrawIdx, DrawVert};
 use std::time::Duration;
 
 fn main() -> Result<()> {
@@ -13,6 +13,9 @@ fn main() -> Result<()> {
 const TITLE: &'static str = "SDL2 + glow";
 const W: u32 = 1280;
 const H: u32 = 720;
+
+/// Capacity of GPU buffers
+const N_QUADS: usize = 2048;
 
 const VS_SRC: &str = include_str!("vs.glsl");
 const FS_SRC: &str = include_str!("fs.glsl");
@@ -53,9 +56,7 @@ impl SdlHandles {
     }
 }
 
-unsafe fn setup_vao(gl: &glow::Context, vao: glow::VertexArray) {
-    gl.bind_vertex_array(Some(vao));
-
+unsafe fn set_vertex_attributes(gl: &glow::Context, vao: glow::VertexArray) {
     let stride = std::mem::size_of::<imgui::DrawVert>() as i32;
 
     // pos: [f32: 2]
@@ -205,7 +206,6 @@ impl Resources {
         let vao = gl
             .create_vertex_array()
             .expect("Cannot create vertex array");
-        self::setup_vao(gl, vao);
 
         let sources = [
             (glow::VERTEX_SHADER, VS_SRC),
@@ -213,8 +213,16 @@ impl Resources {
         ];
         let program = self::gen_shader_program(gl, &sources);
 
-        let vbuf = self::alloc_buffer(gl, glow::ARRAY_BUFFER, 4 * 2048 * 20)?;
-        let ibuf = self::alloc_buffer(gl, glow::ELEMENT_ARRAY_BUFFER, 6 * 2048 * 2)?;
+        let vbuf = self::alloc_buffer(
+            gl,
+            glow::ARRAY_BUFFER,
+            4 * N_QUADS * std::mem::size_of::<DrawVert>(),
+        )?;
+        let ibuf = self::alloc_buffer(
+            gl,
+            glow::ELEMENT_ARRAY_BUFFER,
+            6 * N_QUADS * std::mem::size_of::<DrawIdx>(),
+        )?;
 
         let img = include_bytes!("ika-chan.png");
         let img = image::load_from_memory(img).expect("Unable to load image");
@@ -247,12 +255,13 @@ impl Resources {
     }
 
     pub unsafe fn bind(&self, gl: &glow::Context) {
-        self::setup_vao(gl, self.vao);
-        // gl.bind_vertex_array(Some(self.vao));
-        gl.use_program(Some(self.program));
-        gl.bind_texture(glow::TEXTURE_2D, Some(self.tex));
+        // NOTE: this order is important.. bind buffers first and then setup VAO!
+        gl.bind_vertex_array(Some(self.vao));
         gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbuf));
         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ibuf));
+        self::set_vertex_attributes(gl, self.vao);
+        gl.use_program(Some(self.program));
+        gl.bind_texture(glow::TEXTURE_2D, Some(self.tex));
 
         // TODO:
         // gl.enable(glow::BLEND);
@@ -266,9 +275,9 @@ impl Resources {
     pub unsafe fn unbind(gl: &glow::Context) {
         gl.bind_vertex_array(None);
         gl.use_program(None);
-        // gl.bind_texture(glow::TEXTURE_2D, None);
-        // gl.bind_buffer(glow::ARRAY_BUFFER, None);
-        // gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+        gl.bind_texture(glow::TEXTURE_2D, None);
+        gl.bind_buffer(glow::ARRAY_BUFFER, None);
+        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
     }
 
     pub unsafe fn draw(&self, gl: &glow::Context, base_elem: i32, n_elems: i32) {
@@ -280,7 +289,7 @@ impl Resources {
             // element_type: u16 index (unsighned short)
             glow::UNSIGNED_SHORT,
             // offset FIXME: in bytes?
-            base_elem * std::mem::size_of::<imgui::DrawIdx>() as i32,
+            base_elem * std::mem::size_of::<DrawIdx>() as i32,
         );
     }
 }
@@ -357,7 +366,7 @@ unsafe fn setup_resources(gl: &glow::Context, res: &mut Resources) -> Result<()>
     gl.bind_buffer(glow::ARRAY_BUFFER, Some(res.vbuf));
     gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, bytes);
 
-    let indices: [imgui::DrawIdx; 6] = [0, 1, 2, 3, 1, 2];
+    let indices: [DrawIdx; 6] = [0, 1, 2, 3, 1, 2];
     let bytes = std::slice::from_raw_parts(
         indices.as_ptr() as *const _,
         indices.len() * std::mem::size_of::<DrawVert>(),
@@ -399,8 +408,8 @@ unsafe fn main_impl() -> Result<()> {
             H as f32, // bottom
             0.0,      // top
             // FIXME: which is coorect
-            1.0, // near
-            0.0, // far
+            0.0, // near
+            1.0, // far
         );
         res.set_uniforms(&gl, mat);
 
