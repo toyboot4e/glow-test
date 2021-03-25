@@ -1,3 +1,5 @@
+//! TODO: implement imgui-rs backend
+
 use anyhow::*;
 use glow::*;
 use image::GenericImageView;
@@ -146,6 +148,7 @@ unsafe fn gen_shader_program(gl: &glow::Context, sources: &[(u32, &str)]) -> glo
 unsafe fn alloc_buffer(gl: &glow::Context, type_: u32, capacity: usize) -> Result<glow::Buffer> {
     let buf = gl.create_buffer().map_err(Error::msg)?;
     gl.bind_buffer(type_, Some(buf));
+    // FIXME:
     // gl.buffer_data_size(type_, capacity as i32, glow::STREAM_DRAW);
     gl.buffer_data_size(type_, capacity as i32, glow::STATIC_DRAW);
     gl.bind_buffer(type_, None);
@@ -241,13 +244,6 @@ impl Resources {
             .get_uniform_location(self.program, "transform")
             .expect("Unable to locate transform uniform");
         gl.uniform_matrix_4_f32_slice(Some(&location), false, &mat);
-
-        // FIXME:
-        // let location = gl
-        //     // we must not add '\0' here -- glow does it
-        //     .get_uniform_location(self.program, "tex")
-        //     .expect("Unable to locate texture uniform");
-        // gl.uniform_1_i32(Some(&location), 0);
     }
 
     pub unsafe fn bind(&self, gl: &glow::Context) {

@@ -11,9 +11,6 @@ out vec2 fs_uv;
 
 void main() {
     gl_Position = transform * vec4(vs_pos, 0.0, 1.0);
-    // TODO: draw something..
-    // gl_Position = transform * vec4(1, 1, 1, 1);
-    // gl_Position = vec4(0.1, 0.1, 0.1, 0.1) * vec4(vs_pos, 0.0, 1.0);
     fs_color = vs_color;
     fs_uv = vs_uv;
 }
